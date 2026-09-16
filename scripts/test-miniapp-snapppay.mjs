@@ -762,7 +762,7 @@ check("last owner cannot be demoted", lastBotMessage(OWNER_ID)?.text.includes("�
 
   // The user actions were audited (section catalog, actions prefixed کاربران:)
   const audit = await (await callAPI(
-    "logs?section=catalog&admin=" + OWNER_ID + "&page=0", initDataOwner
+    "logs?section=security&admin=" + OWNER_ID + "&page=0", initDataOwner
   )).json();
   check("user actions written to audit log",
     audit.events.some(event => event.action.includes("مسدودسازی کاربر")) &&
@@ -797,6 +797,97 @@ check("last owner cannot be demoted", lastBotMessage(OWNER_ID)?.text.includes("�
 
   const denied = await callAPI("sms-settings", initDataOrders);
   check("sms settings denied without sms perm 403", denied.status === 403);
+}
+
+// ---------- 13. Stats sales chart + receipt auto-confirm + notification gating ----------
+{
+  const stats = await (await callAPI("stats", initDataOwner)).json();
+  check("stats returns chart series for all ranges",
+    Array.isArray(stats.chart.daily) && Array.isArray(stats.chart.weekly) &&
+    Array.isArray(stats.chart.monthly));
+  check("daily chart includes the paid snapppay sale",
+    stats.chart.daily.some(item => item.amount >= 300000));
+}
+
+{
+  // A card order with a pending receipt, already confirmed, gets shipped.
+  const cardOrderId = crypto.randomUUID().replaceAll("-", "");
+  const nowMs = Date.now();
+
+  db.prepare(
+    "INSERT INTO orders(id,request_id,request_hash,code,name,phone,address,subtotal,shipping,discount,total," +
+    "status,payment_method,payment_status,created_at,updated_at) " +
+    "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"
+  ).run(cardOrderId, crypto.randomUUID(), "h".repeat(64), "AB12", "مشتری رسید",
+    "09124440000", "تهران، خیابان رسید، پلاک ۳", 300000, 0, 0, 300000,
+    "confirmed", "card", "review", nowMs, nowMs);
+
+  db.prepare(
+    "INSERT INTO order_lines(id,order_id,product_id,name,selection,price,quantity,inventory_mode) " +
+    "VALUES(?,?,?,?,?,?,?,?)"
+  ).run(crypto.randomUUID().replaceAll("-", ""), cardOrderId, "prod1",
+    "گیفت کاردستی", "{}", 150000, 2, "simple");
+
+  db.prepare(
+    "INSERT INTO receipts(id,order_id,file_id,uploaded_at) VALUES(?,?,?,?)"
+  ).run(crypto.randomUUID().replaceAll("-", ""), cardOrderId, "file-test-1", nowMs);
+
+  const salesBefore = db.prepare("SELECT sales_count FROM products WHERE id='prod1'").get().sales_count;
+
+  const shipped = await (await callAPI("order/" + cardOrderId + "/status", initDataOwner, {
+    method: "POST", body: { status: "sent" }
+  })).json();
+
+  check("shipped card order auto-confirms the pending receipt",
+    shipped.status === "sent" && shipped.payment_status === "paid");
+
+  check("auto-confirm recorded in order_events",
+    db.prepare("SELECT COUNT(*) AS c FROM order_events WHERE order_id=? AND kind='receipt_auto_confirmed'")
+      .get(cardOrderId).c === 1);
+
+  const salesAfter = db.prepare("SELECT sales_count FROM products WHERE id='prod1'").get().sales_count;
+  check("auto-confirmed order counts towards sales", salesAfter === salesBefore + 2);
+
+  // A non-card review order must NOT auto-confirm on ship.
+  // (Gateway orders keep payment_method='contact' with the gateway column set.)
+  const gwOrderId = crypto.randomUUID().replaceAll("-", "");
+  db.prepare(
+    "INSERT INTO orders(id,request_id,request_hash,code,name,phone,address,subtotal,shipping,discount,total," +
+    "status,payment_method,gateway,payment_status,created_at,updated_at) " +
+    "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"
+  ).run(gwOrderId, crypto.randomUUID(), "g".repeat(64), "CD34", "مشتری درگاه",
+    "09124440001", "تهران، خیابان درگاه، پلاک ۵", 150000, 0, 0, 150000,
+    "confirmed", "contact", "zibal", "review", nowMs, nowMs);
+
+  const shippedGateway = await (await callAPI("order/" + gwOrderId + "/status", initDataOwner, {
+    method: "POST", body: { status: "sent" }
+  })).json();
+  check("gateway review order does not auto-confirm on ship",
+    shippedGateway.status === "sent" && shippedGateway.payment_status === "review");
+}
+
+{
+  // Notification gating: a new order's order_new message goes only to
+  // admins holding the "orders" key (111 owner + 222 orders-only).
+  const before = sentMessages.filter(m => m.text.includes("🛍 سفارش جدید") && m.chat_id === String(CATALOG_ONLY_ID)).length;
+
+  await createOrder(new Request(ORIGIN + "/api/orders", {
+    method: "POST",
+    headers: { origin: ORIGIN, "content-type": "application/json" },
+    body: JSON.stringify({
+      requestId: crypto.randomUUID(), accessKey: "c".repeat(64),
+      name: "مشتری گیت", phone: "09123330000", address: "تهران، خیابان گیت، پلاک ۱",
+      postal: "", note: "", coupon: "", paymentMethod: "contact",
+      items: [{ productId: "prod1", variantId: "", selection: {}, quantity: 1 }]
+    })
+  }), env, ctx);
+  await drain();
+
+  const gated = sentMessages.filter(m => m.text.includes("🛍 سفارش جدید") && m.chat_id === String(CATALOG_ONLY_ID));
+  check("order notification NOT sent to admin without orders perm", gated.length === before);
+
+  const ownerGot = sentMessages.some(m => m.text.includes("🛍 سفارش جدید") && m.chat_id === String(OWNER_ID));
+  check("order notification reaches the owner", ownerGot);
 }
 
 // ---------- summary ----------

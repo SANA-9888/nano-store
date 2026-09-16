@@ -631,6 +631,15 @@ async function main() {
         database_id: databaseId
       }
     ],
+    /*
+     * Runtime switches visible in the dashboard (Workers > Settings >
+     * Variables). Both default to "on"; set "off" there or here to
+     * disable the Telegram Mini App or the customer-accounts module.
+     */
+    vars: {
+      MINIAPP_ENABLED: "on",
+      USERS_ENABLED: "on"
+    },
     triggers: {
       crons: ["*/15 * * * *"]
     },

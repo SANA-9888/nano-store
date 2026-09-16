@@ -1,5 +1,6 @@
 import { rows, one, execute, getSettings } from "./db.js";
 import { envFlagOn } from "./defaults.js";
+import { adminHolds } from "./permissions.js";
 
 export async function telegram(env, method, payload = {}) {
   let response;
@@ -170,6 +171,32 @@ export async function deliverNotifications(env, limit = 6) {
     [Date.now(), Date.now(), limit]
   );
 
+  if (!candidates.length) return;
+
+  /*
+   * Section isolation: an administrator without the governing
+   * permission never receives the notification (e.g. order messages
+   * require the "orders" key, stock alerts the "products" key).
+   * The delivery row is consumed so it is not retried forever.
+   */
+  const REQUIRED_PERMS = {
+    order_new: "orders",
+    order_reminder: "orders",
+    low_stock: "products"
+  };
+
+  const adminIds = [...new Set(candidates.map(item => String(item.admin_id)))];
+  const adminRows = await rows(
+    env,
+    "SELECT id,role,permissions FROM admins" +
+    (adminIds.length
+      ? " WHERE id IN (" + adminIds.map(() => "?").join(",") + ")"
+      : ""),
+    adminIds
+  );
+
+  const adminMap = new Map(adminRows.map(row => [String(row.id), row]));
+
   for (const candidate of candidates) {
     const now = Date.now();
 
@@ -196,6 +223,22 @@ export async function deliverNotifications(env, limit = 6) {
       );
 
       if (!job) continue;
+
+      const required = REQUIRED_PERMS[job.kind];
+
+      if (
+        required &&
+        !adminHolds(adminMap.get(String(candidate.admin_id)), required)
+      ) {
+        await execute(
+          env,
+          "UPDATE notification_deliveries SET sent_at=?,lease_until=0 " +
+          "WHERE job_id=? AND admin_id=?",
+          [now, candidate.job_id, candidate.admin_id]
+        );
+
+        continue;
+      }
 
       const isOrderJob = job.kind === "order_new" || job.kind === "order_reminder";
       const keyboard = isOrderJob
@@ -268,8 +311,17 @@ export async function collectOrderNotifications(env) {
   }
 }
 
-export async function notifyAdminsBestEffort(env, text, keyboard = []) {
-  const admins = await rows(env, "SELECT id FROM admins");
+/*
+ * Immediate best-effort broadcast. When permissionKey is given, only
+ * administrators holding that section receive the message — used for
+ * order/payment/receipt events so restricted admins stay quiet.
+ */
+export async function notifyAdminsBestEffort(env, text, keyboard = [], permissionKey = "") {
+  let admins = await rows(env, "SELECT id,role,permissions FROM admins");
+
+  if (permissionKey) {
+    admins = admins.filter(admin => adminHolds(admin, permissionKey));
+  }
 
   const results = await Promise.allSettled(
     admins.map(admin => sendMessage(env, admin.id, text, keyboard))

@@ -78,6 +78,8 @@ export const SETTING_FIELDS = {
   turnstile_enabled: ["Turnstile", "bool", false],
   turnstile_site_key: ["کلید عمومی Turnstile", "text", ""],
 
+  log_retention_days: ["مدت نگهداری گزارش فعالیت، روز", "retention", 20],
+
   sms_provider: ["سرویس پیامک", "smsprovider", "kavenegar"],
   sms_api_key: ["کلید API سرویس پیامک", "text", ""],
   sms_template: ["قالب کد تایید پیامک", "text", ""]
@@ -221,6 +223,12 @@ export function parseSetting(key, input) {
     const seconds = integer(value, 30);
     if (seconds < 4) throw new Error("Use 4-30 seconds.");
     return seconds;
+  }
+
+  if (type === "retention") {
+    const days = integer(value, 365);
+    if (days < 1) throw new Error("Use 1-365 days.");
+    return days;
   }
 
   if (type === "color") {
@@ -474,7 +482,9 @@ export const SETTING_HELP = {
     "مثال: #ffffff یا #fde68a\n" +
     "پیشنهاد: پس‌زمینه تیره ← متن روشن (#ffffff) و برعکس.",
   logo:
-    "لوگوی هدر سایت. عکس را به‌شکل Photo ارسال کنید (PNG/JPG/WebP تا ۴MB).\n" +
+    "لوگوی هدر سایت. دو روش ارسال مجاز است:\n" +
+    "۱) عکس معمولی تلگرام (Photo) — PNG/JPG/WebP تا ۴MB.\n" +
+    "۲) فایل (Document) با همان پسوندها — برای حفظ شفافیت پس‌زمینه PNG این روش بهتر است چون تلگرام عکس‌های معمولی را فشرده می‌کند.\n" +
     "بهترین شکل: مربع با پس‌زمینه شفاف. حذف: -",
   font:
     "فونت اختصاصی سایت. فایل را به‌شکل Document بفرستید.\n" +
@@ -575,6 +585,10 @@ export const SETTING_HELP = {
   turnstile_site_key:
     "کلید عمومی Turnstile (sitekey) — با 0x شروع می‌شود.\n" +
     "مثال: 0x4AAAAAAA...",
+  log_retention_days:
+    "مدت نگهداری رویدادهای «گزارش فعالیت» پیش از پاک‌سازی خودکار.\n" +
+    "مجاز: عدد ۱ تا ۳۵۵ روز — مثال: 20\n" +
+    "پاک‌سازی خودکار باعث کوچک ماندن دیتابیس D1 می‌شود.",
   sms_provider:
     "سرویس ارسال کد تایید ورود مشتریان.\n" +
     "از دکمه‌های همین پنل انتخاب کنید؛ مقادیر مجاز:\n" +

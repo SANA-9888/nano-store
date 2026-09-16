@@ -872,7 +872,8 @@ export async function handleGatewayCallback(url, env, ctx) {
         notifyAdminsBestEffort(
           env,
           message,
-          await miniAppOrderKeyboard(env, order.id)
+          await miniAppOrderKeyboard(env, order.id),
+          "orders"
         ).catch(() => {
           console.error("Gateway payment notification failed.");
         })

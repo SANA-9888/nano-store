@@ -51,7 +51,7 @@ import {
 
 import { markPaidManually, changeOrderStatus } from "./orders.js";
 
-import { logAdminAction } from "./audit.js";
+import { logAdminAction, AUDIT_SECTIONS } from "./audit.js";
 
 import { uploadProductImage } from "./media.js";
 
@@ -266,7 +266,7 @@ async function bodyJSON(request) {
 async function apiStats(env, access) {
   const now = Date.now();
 
-  const [orders, products, variants] = await Promise.all([
+  const [orders, products, variants, daily, weekly, monthly] = await Promise.all([
     one(
       env,
       `SELECT
@@ -300,7 +300,10 @@ async function apiStats(env, access) {
       "JOIN products p ON p.id=v.product_id " +
       "WHERE v.enabled=1 AND v.stock<=MAX(v.low_stock_threshold,0) " +
       "AND p.inventory_mode='variants'"
-    )
+    ),
+    salesChartSeries(env, "daily"),
+    salesChartSeries(env, "weekly"),
+    salesChartSeries(env, "monthly")
   ]);
 
   const lowStock = await one(
@@ -326,8 +329,62 @@ async function apiStats(env, access) {
       published: Number(products.published || 0)
     },
     lowStock:
-      Number(lowStock.total || 0) + Number(variants.total || 0)
+      Number(lowStock.total || 0) + Number(variants.total || 0),
+    chart: {
+      daily: daily,
+      weekly: weekly,
+      monthly: monthly
+    }
   };
+}
+
+/*
+ * Paid-sales buckets for the Mini App home charts.
+ * daily   -> last 14 days   (bucket = YYYY-MM-DD)
+ * weekly  -> last 8 weeks   (bucket = date of the Saturday starting the week)
+ * monthly -> last 6 months  (bucket = YYYY-MM)
+ * Buckets with no sales are filled client-side with zero bars.
+ */
+function salesChartSeries(env, range) {
+  const config = {
+    daily: {
+      since: 14 * 86400000,
+      group: "strftime('%Y-%m-%d', o.paid_at/1000, 'unixepoch')"
+    },
+    weekly: {
+      since: 8 * 7 * 86400000,
+      /*
+       * Persian weeks start on Saturday. strftime('%w') maps
+       * Saturday to 6, so (w + 1) % 7 is the number of days to step
+       * back in order to reach the Saturday that starts the week.
+       */
+      group:
+        "date(o.paid_at/1000, 'unixepoch', '-' || " +
+        "((CAST(strftime('%w', o.paid_at/1000, 'unixepoch') AS INTEGER) + 1) % 7) || " +
+        "' days')"
+    },
+    monthly: {
+      since: 6 * 31 * 86400000,
+      group: "strftime('%Y-%m', o.paid_at/1000, 'unixepoch')"
+    }
+  }[range];
+
+  return rows(
+    env,
+    "SELECT " + config.group + " AS bucket, " +
+    "COALESCE(SUM(o.total),0) AS amount, COUNT(*) AS orders " +
+    "FROM orders o " +
+    "WHERE o.payment_status='paid' AND o.status!='cancelled' " +
+    "AND o.paid_at IS NOT NULL AND o.paid_at>=? " +
+    "GROUP BY bucket ORDER BY bucket",
+    [Date.now() - config.since]
+  ).then(list =>
+    list.map(item => ({
+      bucket: String(item.bucket || ""),
+      amount: Number(item.amount || 0),
+      orders: Number(item.orders || 0)
+    }))
+  ).catch(() => []);
 }
 
 async function apiOrders(env, url) {
@@ -814,7 +871,8 @@ async function apiLogs(env, access, url) {
 
   const page = Math.max(0, Math.floor(Number(url.searchParams.get("page") || 0)));
   const adminId = String(url.searchParams.get("admin") || "").slice(0, 32);
-  const section = url.searchParams.get("section") === "orders" ? "orders" : "catalog";
+  const requested = String(url.searchParams.get("section") || "catalog");
+  const section = AUDIT_SECTIONS[requested] ? requested : "catalog";
 
   if (!/^[1-9]\d{0,19}$/.test(adminId)) {
     throw new AppError(400, "شناسه مدیر نامعتبر است.");
@@ -973,7 +1031,7 @@ async function apiUserAction(env, access, userId, body) {
     await logAdminAction(
       env,
       access.adminId,
-      "catalog",
+      "security",
       op === "block" ? "کاربران: مسدودسازی کاربر" : "کاربران: آزادسازی کاربر",
       user.phone,
       ""
@@ -988,7 +1046,7 @@ async function apiUserAction(env, access, userId, body) {
     await logAdminAction(
       env,
       access.adminId,
-      "catalog",
+      "security",
       "کاربران: حذف کاربر",
       user.phone,
       ""
@@ -1735,6 +1793,11 @@ body{
 .stat .v{font-size:1.22rem;font-weight:800;letter-spacing:.2px}
 .stat .k{font-size:.7rem;color:var(--mut);margin-top:1px}
 .stat.hot .v{color:var(--accent)}
+/* Sales bar chart (home) */
+.chart{display:flex;align-items:flex-end;gap:3px;min-height:172px}
+.chart .bar-col{flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:5px;height:172px;padding-bottom:2px}
+.chart .bar{width:100%;max-width:26px;background:linear-gradient(180deg,var(--accent),var(--brand));border-radius:7px 7px 2px 2px;min-height:2px;opacity:.92}
+.chart .bar-label{font-size:.56rem;color:var(--mut);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;transform:rotate(-38deg)}
 .row{display:flex;align-items:center;justify-content:space-between;gap:10px}
 .mut{color:var(--mut);font-size:.74rem}
 .btn{border:1px solid var(--line);background:var(--glass);color:var(--ink);font-family:inherit;
@@ -2133,6 +2196,7 @@ textarea.in{min-height:96px;resize:vertical}
 
   function loadStats() {
     api("stats").then(function (data) {
+      STATE.statsData = data;
       var box = $("statsBox");
       if (!box) return;
       box.innerHTML =
@@ -2143,11 +2207,157 @@ textarea.in{min-height:96px;resize:vertical}
         statCard(data.orders.sent, "ارسال‌شده") +
         "</div>" +
         '<div class="mut" style="margin-top:10px">فروش تأییدشده ۳۰ روز اخیر: <b class="oktext">' +
-        money(data.paidMonth) + "</b></div>";
+        money(data.paidMonth) + "</b></div>" +
+        '<div style="margin-top:14px">' + salesChartHTML(data) + "</div>";
+
+      Array.prototype.forEach.call(document.querySelectorAll("[data-chartmode]"), function (btn) {
+        btn.onclick = function () {
+          haptic();
+          STATE.chartMode = btn.getAttribute("data-chartmode");
+          Array.prototype.forEach.call(document.querySelectorAll("[data-chartmode]"), function (other) {
+            other.classList.toggle("active", other === btn);
+          });
+          var host = $("salesChart");
+          if (host) host.innerHTML = salesChartBars(data);
+        };
+      });
     }).catch(function (error) {
       var box = $("statsBox");
       if (box) box.innerHTML = '<div class="errtext">' + esc(error.message) + "</div>";
     });
+  }
+
+  // ---------- sales charts (home) ----------
+
+  var JALALI_MONTHS = ["فروردین", "اردیبهشت", "خرداد", "تیر", "مرداد", "شهریور", "مهر", "آبان", "آذر", "دی", "بهمن", "اسفند"];
+
+  function toJalali(gy, gm, gd) {
+    var gDays = [0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334];
+    var jy = gy <= 1600 ? 0 : 979;
+    gy -= gy <= 1600 ? 621 : 1600;
+    var gy2 = gm > 2 ? gy + 1 : gy;
+    var days = 365 * gy + Math.floor((gy2 + 3) / 4) - Math.floor((gy2 + 99) / 100) +
+      Math.floor((gy2 + 399) / 400) - 80 + gd + gDays[gm - 1];
+    jy += 33 * Math.floor(days / 12053);
+    days %= 12053;
+    jy += 4 * Math.floor(days / 1461);
+    days %= 1461;
+    if (days > 365) {
+      jy += Math.floor((days - 1) / 365);
+      days = (days - 1) % 365;
+    }
+    var jm = days < 186 ? 1 + Math.floor(days / 31) : 7 + Math.floor((days - 186) / 30);
+    return [jy, jm];
+  }
+
+  function jalaliBucketLabel(bucket, mode) {
+    var parts = String(bucket).split("-");
+    if (parts.length < 2) return bucket;
+    var y = Number(parts[0]);
+    var m = Number(parts[1]);
+    var d = parts.length > 2 ? Number(parts[2]) : 1;
+    if (!y || !m) return bucket;
+    var jalali = toJalali(y, m, d);
+    if (mode === "monthly") {
+      return JALALI_MONTHS[jalali[1] - 1] + " " + num(jalali[0]);
+    }
+    return num(jalali[1]) + " " + JALALI_MONTHS[jalali[1] - 1];
+  }
+
+  function chartModeBuckets(mode) {
+    if (mode === "weekly") return 8;
+    if (mode === "monthly") return 6;
+    return 14;
+  }
+
+  function chartBucketsFor(mode, series) {
+    /*
+     * Build a full list of buckets (empty ones included) so gaps in
+     * sales appear as zero bars instead of silently disappearing.
+     */
+    var result = [];
+    var map = {};
+    Array.prototype.forEach.call(series || [], function (item) {
+      map[item.bucket] = item;
+    });
+
+    var day = 86400000;
+
+    for (var index = chartModeBuckets(mode) - 1; index >= 0; index--) {
+      var reference = new Date(Date.now() - index * (mode === "daily" ? day : mode === "weekly" ? 7 * day : 31 * day));
+      var bucket;
+
+      if (mode === "monthly") {
+        bucket = reference.getUTCFullYear() + "-" + String(reference.getUTCMonth() + 1).padStart(2, "0");
+      } else if (mode === "weekly") {
+        var shifted = new Date(reference.getTime() - ((reference.getUTCDay() + 1) % 7) * day);
+        bucket = shifted.toISOString().slice(0, 10);
+      } else {
+        bucket = reference.toISOString().slice(0, 10);
+      }
+
+      var found = map[bucket];
+      result.push({
+        bucket: bucket,
+        amount: found ? found.amount : 0,
+        orders: found ? found.orders : 0
+      });
+    }
+
+    return result;
+  }
+
+  function salesChartHTML(data) {
+    var modes = [["daily", "روزانه"], ["weekly", "هفتگی"], ["monthly", "ماهانه"]];
+    var chips = modes.map(function (mode) {
+      return '<button class="fchip' + (STATE.chartMode === mode[0] ? " active" : "") +
+        '" data-chartmode="' + mode[0] + '">' + mode[1] + "</button>";
+    }).join("");
+
+    return (
+      '<div class="chips" style="margin-bottom:8px">' + chips + "</div>" +
+      '<div class="card" style="padding:14px 10px 8px">' +
+      '<div id="salesChart">' + salesChartBars(data) + "</div>" +
+      "</div>"
+    );
+  }
+
+  function salesChartBars(data) {
+    var mode = STATE.chartMode || "daily";
+    var series = (data.chart && data.chart[mode]) || [];
+    var buckets = chartBucketsFor(mode, series);
+    var maximum = 0;
+
+    var total = 0;
+
+    Array.prototype.forEach.call(buckets, function (item) {
+      if (item.amount > maximum) maximum = item.amount;
+      total += item.amount;
+    });
+
+    var title = mode === "daily" ? "فروش روزانه (۱۴ روز اخیر)"
+      : mode === "weekly" ? "فروش هفتگی (۸ هفته اخیر)"
+      : "فروش ماهانه (۶ ماه اخیر)";
+
+    var html =
+      '<div style="font-weight:700;margin:0 4px 8px">' + esc(title) +
+      ' <span class="mut" style="font-weight:400">— مجموع: ' + money(total) + "</span></div>" +
+      '<div class="chart" dir="ltr">';
+
+    Array.prototype.forEach.call(buckets, function (item) {
+      var height = maximum > 0 ? Math.max(2, Math.round((item.amount / maximum) * 105)) : 2;
+      var label = jalaliBucketLabel(item.bucket, mode);
+
+      html +=
+        '<div class="bar-col" title="' + esc(label) + ": " + esc(money(item.amount)) +
+        " (" + num(item.orders) + ' سفارش)">' +
+        '<div class="bar" style="height:' + height + 'px"></div>' +
+        '<div class="bar-label">' + esc(label) + "</div>" +
+        "</div>";
+    });
+
+    html += "</div>";
+    return html;
   }
 
   function statCard(value, label, cls) {
@@ -2907,19 +3117,23 @@ textarea.in{min-height:96px;resize:vertical}
 
   var LOG_SECTION_NAMES = {
     catalog: "محصولات و محتوا",
-    orders: "سفارش‌ها"
+    orders: "سفارش‌ها",
+    users: "کاربران",
+    security: "امنیت و مدیران",
+    system: "سیستم و تنظیمات"
   };
 
   function renderLogsView() {
     STATE.logs = { admin: "", section: "catalog", page: 0, items: [], hasMore: false, loading: false };
 
+    var sectionChips = Object.keys(LOG_SECTION_NAMES).map(function (key) {
+      return '<button class="fchip" data-lsec="' + key + '">' + esc(LOG_SECTION_NAMES[key]) + "</button>";
+    }).join("");
+
     $("view").innerHTML =
       '<div class="card"><h3>🕵️ گزارش فعالیت مدیران</h3>' +
-      '<div class="mut">هر تغییری که مدیران در محصولات، محتوا یا سفارش‌ها می‌دهند اینجا ثبت می‌شود (۹۰ روز آخر).</div></div>' +
-      '<div class="chips" id="logSections">' +
-      '<button class="fchip" data-lsec="catalog">محصولات و محتوا</button>' +
-      '<button class="fchip" data-lsec="orders">سفارش‌ها</button>' +
-      "</div>" +
+      '<div class="mut">هر تغییری که مدیران در بخش‌های مختلف می‌دهند اینجا ثبت می‌شود؛ رویدادها پس از مدت نگهداری تعیین‌شده پاک می‌شوند.</div></div>' +
+      '<div class="chips" id="logSections">' + sectionChips + "</div>" +
       '<div class="card" id="logAdminPicker"><div class="mut">در حال دریافت مدیران…</div></div>' +
       '<div class="list" id="logList"><div class="empty">ابتدا یک مدیر را انتخاب کنید.</div></div>' +
       '<div id="logsMore"></div>';

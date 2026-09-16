@@ -305,11 +305,16 @@ h3{font-size:1rem}
  transition:width .25s ease;
 }
 #search-wrap:focus-within,#search-wrap.open{width:min(240px,58vw)}
+/* Closed: glass dead-center of the compact pill.
+   Open: glass moves to the right edge (RTL start of the field). */
 #search-wrap .search-glass{
- position:absolute;top:50%;right:15px;transform:translateY(-50%);
+ position:absolute;top:50%;right:50%;transform:translate(50%,-50%);
  width:20px;height:20px;pointer-events:none;color:var(--muted);
  fill:none;stroke:currentColor;stroke-width:1.8;
  stroke-linecap:round;stroke-linejoin:round;
+}
+#search-wrap:focus-within .search-glass,#search-wrap.open .search-glass{
+ right:15px;transform:translateY(-50%);
 }
 #search{
  width:100%;height:46px;margin:0;
@@ -318,13 +323,14 @@ h3{font-size:1rem}
 }
 #search::-webkit-search-cancel-button{-webkit-appearance:none}
 #sort-wrap{display:flex;gap:8px;align-items:stretch;min-width:0}
-#sort-wrap select{flex:1;min-width:0}
+#sort-wrap select{flex:1;min-width:0;font-size:.8rem;padding:8px 10px;height:40px}
 #filter-button{
- width:48px;flex-shrink:0;padding:0;
- display:grid;place-items:center;
- position:relative;
+ flex-shrink:0;padding:0 15px;gap:7px;
+ display:inline-flex;align-items:center;justify-content:center;
+ position:relative;height:40px;
 }
-#filter-button .icon{width:22px;height:22px}
+#filter-button .icon{width:19px;height:19px}
+#filter-button .filter-label{font-size:.88rem;font-weight:800}
 #filter-button.active{
  border-color:var(--brand);
  color:var(--brand);
@@ -591,6 +597,14 @@ noscript{display:block;margin:20px;padding:20px}
 
 @media(min-width:1000px){
  .bottom-nav{width:440px}
+ /* Desktop: show the full toolbar — always-open search, roomy sort. */
+ .tools{grid-template-columns:minmax(260px,340px) minmax(0,1fr);gap:14px}
+ #search-wrap{width:100%}
+ #search-wrap .search-glass{right:15px;transform:translateY(-50%)}
+ #search{height:44px}
+ #sort-wrap select{font-size:.92rem;padding:9px 12px;height:44px}
+ #filter-button{padding:0 22px;height:44px;gap:9px}
+ #filter-button .filter-label{font-size:.95rem}
 }
 @media(max-width:800px){
  .product-grid{grid-template-columns:repeat(3,minmax(0,1fr));gap:13px}
@@ -601,7 +615,7 @@ noscript{display:block;margin:20px;padding:20px}
  .slider-shell{aspect-ratio:2}
  .slide-content{right:22px;bottom:22px;left:55px}
 }
-@media(max-width:600px){
+ @media(max-width:600px){
  .wrap{width:calc(100% - 28px)}
  .header-inner{min-height:82px;gap:6px}
  .header-actions{gap:4px}
@@ -621,7 +635,10 @@ noscript{display:block;margin:20px;padding:20px}
  .category-image{width:115px}
  .category-name{font-size:.82rem}
  .tools{grid-template-columns:auto minmax(0,1fr);gap:8px}
- .tools select{font-size:.77rem;padding:10px 8px}
+ .tools select{font-size:.74rem;padding:6px 6px;height:38px}
+ #filter-button{padding:0 10px;gap:5px;height:38px}
+ #filter-button .filter-label{font-size:.8rem}
+ #filter-button .icon{width:17px;height:17px}
  .product-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:11px}
  .product-card{border-radius:18px}
  .product-info{padding:11px}
@@ -641,6 +658,7 @@ noscript{display:block;margin:20px;padding:20px}
 @media(max-width:350px){
  .tools{grid-template-columns:1fr}
  #search-wrap{width:100%}
+ #search-wrap .search-glass{right:15px;transform:translateY(-50%)}
  .header-actions .icon{width:35px;padding:7px}
  .category-image{width:95px}
  .bank-number{letter-spacing:1px}
@@ -773,6 +791,7 @@ noscript{display:block;margin:20px;padding:20px}
     <button id="filter-button" type="button" aria-haspopup="dialog"
      aria-label="فیلتر قیمت و موجودی">
      <svg class="icon" aria-hidden="true"><use href="#i-filter"></use></svg>
+     <span class="filter-label">فیلتر</span>
     </button>
    </div>
   </div>
@@ -822,9 +841,9 @@ noscript{display:block;margin:20px;padding:20px}
   <svg class="nav-icon" aria-hidden="true"><use href="#i-search"></use></svg>
   <span>جست‌وجو</span>
  </button>
- <button id="nav-cart" aria-haspopup="dialog">
-  <svg class="nav-icon" aria-hidden="true"><use href="#i-cart"></use></svg>
-  <span>سبد <span id="nav-cart-count"></span></span>
+ <button id="nav-account" aria-label="پنل کاربری">
+  <svg class="nav-icon" aria-hidden="true"><use href="#i-user"></use></svg>
+  <span>پنل کاربری</span>
  </button>
 </nav>
 
@@ -1254,58 +1273,49 @@ function setTheme(theme, remember = false) {
 }
 
 /*
- * Selected-category chip colors. Both follow the brand color unless the
- * owner overrides them (category_active_bg / category_active_color).
- * Without an override the text ink is derived from the background
- * luminance so a dark brand always gets readable white text.
+ * Brand colors — one function, three variables:
+ *  --brand          brand background (fallback of every on-brand surface)
+ *  --brand-ink      text color ON brand surfaces
+ *  --chip-active-bg / --chip-active-ink  selected category chip
+ *
+ * category_active_color (رنگ متن دسته انتخاب‌شده) is the master ink
+ * override: when the owner picks it, EVERY surface that paints the
+ * brand color (option chips, add-to-cart button, toast, header …) uses
+ * that text color. Without an override the ink is derived from the
+ * background luminance so a dark brand always gets white text.
  */
-function applyChipColors(settings) {
-  const root = document.documentElement.style;
-  const brand = /^#[a-f0-9]{6}$/i.test(settings.brand_color || "")
-    ? settings.brand_color.toLowerCase()
-    : "#637c68";
-  const bg = /^#[a-f0-9]{6}$/i.test(settings.category_active_bg || "")
-    ? settings.category_active_bg.toLowerCase()
-    : brand;
-
-  let ink = /^#[a-f0-9]{6}$/i.test(settings.category_active_color || "")
-    ? settings.category_active_color.toLowerCase()
-    : "";
-
-  if (!ink) {
-    const rgb = [1, 3, 5].map(start => {
-      const channel = parseInt(bg.slice(start, start + 2), 16) / 255;
-
-      return channel <= 0.04045
-        ? channel / 12.92
-        : Math.pow((channel + 0.055) / 1.055, 2.4);
-    });
-
-    const luminance = rgb[0] * 0.2126 + rgb[1] * 0.7152 + rgb[2] * 0.0722;
-    ink = luminance > 0.179 ? "#101912" : "#ffffff";
-  }
-
-  root.setProperty("--chip-active-bg", bg);
-  root.setProperty("--chip-active-ink", ink);
-}
-
-function applyBrand(color) {
-  const value = /^#[a-f0-9]{6}$/i.test(color || "") ? color : "#637c68";
-  document.documentElement.style.setProperty("--brand", value);
-
+function brandLuminanceInk(bgColor) {
   const rgb = [1, 3, 5].map(start => {
-    const channel = parseInt(value.slice(start, start + 2), 16) / 255;
+    const channel = parseInt(bgColor.slice(start, start + 2), 16) / 255;
+
     return channel <= 0.04045
       ? channel / 12.92
       : Math.pow((channel + 0.055) / 1.055, 2.4);
   });
 
   const luminance = rgb[0] * 0.2126 + rgb[1] * 0.7152 + rgb[2] * 0.0722;
-  document.documentElement.style.setProperty(
-    "--brand-ink",
-    luminance > 0.179 ? "#101912" : "#ffffff"
-  );
-  document.querySelector('meta[name="theme-color"]').content = value;
+  return luminance > 0.179 ? "#101912" : "#ffffff";
+}
+
+function applyBrandColors(settings) {
+  const root = document.documentElement.style;
+  const brand = /^#[a-f0-9]{6}$/i.test(settings.brand_color || "")
+    ? settings.brand_color.toLowerCase()
+    : "#637c68";
+  const chipBg = /^#[a-f0-9]{6}$/i.test(settings.category_active_bg || "")
+    ? settings.category_active_bg.toLowerCase()
+    : brand;
+
+  const ink = /^#[a-f0-9]{6}$/i.test(settings.category_active_color || "")
+    ? settings.category_active_color.toLowerCase()
+    : "";
+
+  root.setProperty("--brand", brand);
+  root.setProperty("--brand-ink", ink || brandLuminanceInk(brand));
+  root.setProperty("--chip-active-bg", chipBg);
+  root.setProperty("--chip-active-ink", ink || brandLuminanceInk(chipBg));
+
+  document.querySelector('meta[name="theme-color"]').content = brand;
 }
 
 setTheme(storageRead(STORAGE.theme, "light"));
@@ -1434,7 +1444,6 @@ function updateCartBadge() {
   const count = cart.reduce((sum, item) => sum + item.quantity, 0);
   $("header-cart-count").textContent = fa(count);
   $("header-cart-count").hidden = count === 0;
-  $("nav-cart-count").textContent = count ? "(" + fa(count) + ")" : "";
 }
 
 function saveCart() {
@@ -2342,7 +2351,6 @@ $("menu-theme").onclick = () => {
 };
 $("menu-button").onclick = () => showDialog($("menu-dialog"));
 $("header-cart").onclick = openCart;
-$("nav-cart").onclick = openCart;
 $("header-search").onclick = focusSearch;
 $("nav-search").onclick = focusSearch;
 
@@ -2352,6 +2360,10 @@ function goAccount() {
 }
 
 $("account-button").onclick = goAccount;
+$("nav-account").onclick = () => {
+  closeDialogs();
+  goAccount();
+};
 $("menu-account").onclick = () => {
   closeDialogs();
   goAccount();
@@ -3250,8 +3262,7 @@ function applyBootstrap(data) {
   document.title = S.store_name || "فروشگاه";
   $("store-name").textContent = S.store_name || "فروشگاه";
   $("tagline").textContent = S.tagline || "";
-  applyBrand(S.brand_color);
-  applyChipColors(S);
+  applyBrandColors(S);
 
   $("store-logo").hidden = !S.logo;
   if (S.logo) $("store-logo").src = mediaURL(S.logo);
@@ -3295,7 +3306,6 @@ function applyBootstrap(data) {
     S.search_enabled && !S.sorting_enabled ? "100%" : "";
 
   $("header-cart").hidden = !S.cart_enabled;
-  $("nav-cart").hidden = !S.cart_enabled;
   $("note-field").hidden = !S.order_notes_enabled;
   $("coupon-field").hidden = !S.discounts_enabled;
 
@@ -3313,6 +3323,7 @@ function applyBootstrap(data) {
   $("account-link").hidden = !usersOn;
   $("account-button").hidden = !usersOn;
   $("menu-account").hidden = !usersOn;
+  $("nav-account").hidden = !usersOn;
 
   renderFilterCategories();
 

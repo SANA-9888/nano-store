@@ -60,16 +60,39 @@ async function drain() {
 // ---------- mock fetch: telegram only ----------
 const tgCalls = [];
 
+/* Minimal PNG signature + slack so imageType() detects a real PNG. */
+const FAKE_PNG = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13]);
+const FAKE_FILES = {
+  "photos/logo-doc.png": FAKE_PNG
+};
+
 globalThis.fetch = async (url, options = {}) => {
   const target = String(url);
 
   if (target.includes("api.telegram.org")) {
+    // File download: https://api.telegram.org/file/bot<TOKEN>/<path>
+    const filePrefix = "https://api.telegram.org/file/bot" + env.BOT_TOKEN + "/";
+
+    if (target.startsWith(filePrefix)) {
+      const filePath = target.slice(filePrefix.length);
+
+      if (!(filePath in FAKE_FILES)) {
+        return new Response(JSON.stringify({ ok: false, error_code: 404 }), { status: 404 });
+      }
+
+      return new Response(FAKE_FILES[filePath], { status: 200 });
+    }
+
     const method = target.replace("https://api.telegram.org/bot" + env.BOT_TOKEN + "/", "");
     const payload = JSON.parse(options.body || "{}");
     tgCalls.push({ method, payload });
 
+    const result = method === "getFile"
+      ? { file_id: payload.file_id, file_path: "photos/logo-doc.png", file_size: 1024 }
+      : { message_id: 10000 + tgCalls.length };
+
     return new Response(
-      JSON.stringify({ ok: true, result: { message_id: 10000 + tgCalls.length } }),
+      JSON.stringify({ ok: true, result }),
       { status: 200, headers: { "content-type": "application/json" } }
     );
   }
@@ -176,6 +199,25 @@ function countMethod(method) {
 
 function adminRole(id) {
   return db.prepare("SELECT role FROM admins WHERE id=?").get(String(id))?.role;
+}
+
+async function runDocument(userId, mime, fileName) {
+  const document = {
+    file_id: "doc-" + updateCounter,
+    file_size: 1024,
+    mime_type: mime,
+    file_name: fileName
+  };
+
+  await run({
+    update_id: updateCounter,
+    message: {
+      message_id: updateCounter,
+      document,
+      chat: { id: userId, type: "private" },
+      from: { id: userId, is_bot: false }
+    }
+  });
 }
 
 // ---------- seed: two admins, both default role (post-migration state) ----------
@@ -416,6 +458,76 @@ check("stats and help share one row",
   lastKeyboard().some(row => row.length === 2 &&
     row.some(button => button.text.includes("آمار")) &&
     row.some(button => button.text.includes("راهنما"))));
+
+// ---------- 22. help panel offers a contextual back button ----------
+await runCallback("help:settings", 222);
+check("help(settings) offers a back button to settings",
+  lastKeyboard().flat().some(button => button.callback_data === "settings:0"));
+
+await runCallback("help:orders", 222);
+check("help(orders) offers a back button to orders",
+  lastKeyboard().flat().some(button => button.callback_data === "orders:0"));
+
+await runCallback("help:field:default_sort", 222);
+check("field help offers a back button too",
+  lastKeyboard().flat().some(button => button.callback_data === "settings:0"));
+
+await runCallback("help:home", 222);
+check("home help shows no back button (already at home)",
+  !lastKeyboard().flat().some(button => button.callback_data === "home:"));
+
+// ---------- 23. settings keyboard pairs short labels ----------
+await runCallback("settings:0", 222);
+
+const settingsKeyboard = lastKeyboard();
+const settingButtonRows = settingsKeyboard.filter(row =>
+  row.every(button => !["قبلی", "بعدی"].includes(button.text)));
+
+check("settings keyboard pairs short buttons", settingButtonRows.some(row => row.length === 2));
+check("settings long labels keep a full row",
+  settingButtonRows.every(row => row.length !== 2 ||
+    (row[0].text.length + row[1].text.length) <= 44));
+
+// ---------- 24. new audit sections (users/security/system) ----------
+await runCallback("logsel:222", 222);
+check("log sections include all five sections",
+  ["محصولات و محتوا", "سفارش‌ها", "کاربران", "امنیت و مدیران", "سیستم و تنظیمات"]
+    .every(label => lastKeyboardTexts().some(text => text.includes(label))));
+
+await runCallback("logview:222:security:0", 222);
+check("security log view opens", lastText().includes("امنیت و مدیران"));
+
+check("admin management ops audited under security",
+  db.prepare("SELECT COUNT(*) AS c FROM admin_logs WHERE section='security'").get().c >= 1);
+
+await runCallback("setting:store_name", 222);
+await runText("فروشگاه نو", 222);
+check("settings change audited under system",
+  db.prepare("SELECT COUNT(*) AS c FROM admin_logs WHERE section='system'").get().c >= 1);
+
+// ---------- 25. logo accepts PNG documents (transparency preserved) ----------
+await runCallback("setting:logo", 222);
+check("logo prompt mentions document formats",
+  lastText().includes("PNG") && lastText().includes("Document"));
+
+await runDocument(222, "image/png", "logo-doc.png");
+
+const logoMedia = db.prepare(
+  "SELECT id,mime FROM media WHERE kind='photo' AND mime='image/png' ORDER BY created_at DESC LIMIT 1"
+).get();
+check("PNG document stored with image/png mime", Boolean(logoMedia));
+check("logo setting points at the new media row",
+  logoMedia && JSON.parse(
+    db.prepare("SELECT value FROM settings WHERE key='logo'").get().value
+  ) === logoMedia.id);
+
+// An unsupported document mime is rejected with the Persian guidance
+await runCallback("setting:logo", 222);
+const beforeDocCalls = tgCalls.length;
+await runDocument(222, "application/pdf", "not-an-image.pdf");
+check("non-image document rejected with guidance",
+  tgCalls.length > beforeDocCalls &&
+  lastText().includes("PNG") && !lastText().startsWith("Error: Send"));
 
 // ---------- summary ----------
 console.log(`\n${passed} passed, ${failed} failed`);

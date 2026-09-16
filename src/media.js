@@ -87,17 +87,48 @@ async function telegramFile(env, fileId) {
   return response;
 }
 
-export async function saveAdminMedia(env, message, kind) {
-  const file = kind === "photo"
-    ? message.photo?.at(-1)
-    : message.document;
+/*
+ * Telegram delivers images either as a compressed Photo (re-encoded to
+ * JPEG, transparency lost) or, when sent as a file, as a Document that
+ * preserves the original bytes — required for transparent PNG logos.
+ * Both shapes are accepted here; the magic bytes decide the real type.
+ */
+const IMAGE_DOCUMENT_MIMES = new Set([
+  "image/png",
+  "image/jpeg",
+  "image/jpg",
+  "image/webp"
+]);
 
-  if (!file) {
-    throw new Error(
-      kind === "photo"
-        ? "Send an image as a Telegram Photo."
-        : "Send a WOFF2, WOFF or TTF font Document."
-    );
+export async function saveAdminMedia(env, message, kind) {
+  let file;
+
+  if (kind === "photo") {
+    file = message.photo?.at(-1);
+
+    const document = message.document;
+
+    if (
+      !file &&
+      document &&
+      IMAGE_DOCUMENT_MIMES.has(String(document.mime_type || "").toLowerCase())
+    ) {
+      file = document;
+    }
+
+    if (!file) {
+      throw new Error(
+        "تصویر را به‌صورت عکس تلگرام یا فایل PNG، JPG یا WebP بفرستید؛ حداکثر ۴ مگابایت."
+      );
+    }
+  } else {
+    file = message.document;
+
+    if (!file) {
+      throw new Error(
+        "Send a WOFF2, WOFF or TTF font Document."
+      );
+    }
   }
 
   if (!file.file_size || file.file_size > MAX_MEDIA) {
@@ -327,7 +358,9 @@ export async function uploadReceipt(request, env, ctx, orderId) {
     notifyAdminsBestEffort(
       env,
       "🧾 رسید جدید در انتظار بررسی\nکد سفارش: " + order.code +
-      "\nبرای مشاهده رسید و تأیید دستی، سفارش را در پنل باز کنید."
+      "\nبرای مشاهده رسید و تأیید دستی، سفارش را در پنل باز کنید.",
+      [],
+      "orders"
     ).catch(() => {})
   );
 

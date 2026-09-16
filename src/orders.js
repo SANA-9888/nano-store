@@ -646,7 +646,9 @@ export async function markPaidManually(env, orderId, adminId) {
     env,
     "✅ پرداخت با بررسی دستی مدیر تأیید شد\n" +
     "کد: " + order.code + "\n" +
-    "مبلغ: " + Number(order.total).toLocaleString("fa-IR") + " تومان"
+    "مبلغ: " + Number(order.total).toLocaleString("fa-IR") + " تومان",
+    [],
+    "orders"
   );
 
   return { ok: true };
@@ -663,7 +665,7 @@ export async function changeOrderStatus(env, orderId, status, adminId) {
 
   const order = await one(
     env,
-    "SELECT id,code,status FROM orders WHERE id=?",
+    "SELECT id,code,status,payment_status,payment_method,paid_at FROM orders WHERE id=?",
     [orderId]
   );
 
@@ -671,14 +673,47 @@ export async function changeOrderStatus(env, orderId, status, adminId) {
     throw new Error("Order not found.");
   }
 
+  /*
+   * Shipping an order implies its payment was checked and accepted.
+   * A card-to-card receipt that was still pending review is therefore
+   * auto-confirmed here — the order no longer shows up in the
+   * "receipts needing review" queue once it has been sent.
+   */
+  const autoConfirmReceipt =
+    status === "sent" &&
+    order.payment_status === "review" &&
+    order.payment_method === "card";
+
+  const now = Date.now();
+
   const result = await execute(
     env,
-    "UPDATE orders SET status=?,updated_at=? WHERE id=?",
-    [status, Date.now(), orderId]
+    "UPDATE orders SET status=?,payment_status=?,paid_at=?,expires_at=NULL,updated_at=? " +
+    "WHERE id=? AND payment_status=?",
+    [
+      status,
+      autoConfirmReceipt ? "paid" : order.payment_status,
+      autoConfirmReceipt ? now : order.paid_at ?? null,
+      now,
+      orderId,
+      order.payment_status
+    ]
   );
 
   if (!result.meta.changes) {
     throw new Error("Order not found.");
+  }
+
+  if (autoConfirmReceipt) {
+    await execute(
+      env,
+      "INSERT OR IGNORE INTO order_events(id,order_id,kind,actor_id,created_at) " +
+      "VALUES(?,?,'receipt_auto_confirmed',?,?)",
+      ["autoreceipt:" + order.id, order.id, String(adminId), now]
+    );
+
+    // Popularity counting starts with the paid order (idempotent).
+    await recordSalesForOrder(env, order.id);
   }
 
   const labels = {
@@ -693,7 +728,8 @@ export async function changeOrderStatus(env, orderId, status, adminId) {
     "orders",
     labels[status] || status,
     order.code,
-    "وضعیت قبلی: " + (order.status || "؟")
+    "وضعیت قبلی: " + (order.status || "؟") +
+      (autoConfirmReceipt ? "؛ رسید در انتظار بررسی به‌صورت خودکار تایید شد" : "")
   );
 }
 
@@ -712,6 +748,29 @@ export async function maintainOrders(env) {
   await collectOrderNotifications(env);
   await deliverNotifications(env);
 
+  /*
+   * Retention of the activity report. The owner-configurable setting
+   * log_retention_days defaults to 20 days; junk rows (sessions, rate
+   * limits, consumed deliveries) are dropped as soon as they expire so
+   * the D1 database stays small. D1 has no VACUUM, but freed pages are
+   * reused by SQLite automatically, so deleting rows does reclaim
+   * writable space over time.
+   */
+  let retentionDays = 20;
+
+  try {
+    const settings = await getSettings(env);
+    const parsed = Number(settings.log_retention_days);
+
+    if (Number.isFinite(parsed) && parsed >= 1 && parsed <= 365) {
+      retentionDays = Math.floor(parsed);
+    }
+  } catch {
+    // Fall back to the default retention.
+  }
+
+  const retentionCutoff = now - retentionDays * 86400000;
+
   await env.DB.batch([
     env.DB.prepare("DELETE FROM bot_sessions WHERE expires_at<?").bind(now),
     env.DB.prepare("DELETE FROM rate_limits WHERE expires_at<?").bind(now),
@@ -720,9 +779,25 @@ export async function maintainOrders(env) {
     ).bind(now - 7 * 86400000),
     env.DB.prepare(
       "DELETE FROM admin_logs WHERE created_at<?"
-    ).bind(now - 90 * 86400000),
+    ).bind(retentionCutoff),
     env.DB.prepare(
       "DELETE FROM user_otps WHERE expires_at<?"
-    ).bind(now - 3600000)
+    ).bind(now - 3600000),
+    env.DB.prepare(
+      "DELETE FROM user_otps WHERE created_at<?"
+    ).bind(now - 86400000),
+    env.DB.prepare(
+      "DELETE FROM notification_deliveries WHERE job_id IN (" +
+      "SELECT id FROM notification_jobs WHERE created_at<?)"
+    ).bind(retentionCutoff),
+    env.DB.prepare(
+      "DELETE FROM notification_jobs WHERE created_at<?"
+    ).bind(retentionCutoff),
+    env.DB.prepare(
+      "DELETE FROM bot_panels WHERE updated_at<?"
+    ).bind(now - 30 * 86400000),
+    env.DB.prepare(
+      "DELETE FROM gateway_payments WHERE status='failed' AND created_at<?"
+    ).bind(now - 90 * 86400000)
   ]);
 }

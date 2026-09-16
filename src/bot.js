@@ -49,7 +49,17 @@ import {
   changeOrderStatus
 } from "./orders.js";
 
-import { logAdminAction } from "./audit.js";
+import { logAdminAction, AUDIT_SECTIONS } from "./audit.js";
+
+import {
+  PERMISSIONS,
+  ALL_PERMISSIONS,
+  ROLES,
+  ROLE_PERMISSIONS,
+  LEGACY_EXPANSION,
+  accessOf,
+  roleAllows
+} from "./permissions.js";
 
 import {
   applyInventoryStructure,
@@ -80,61 +90,6 @@ const INVENTORY_LABELS = {
   variants: "موجودی مستقل ترکیب‌ها"
 };
 
-/*
- * Access levels. The owner manages administrators; a lower-level
- * administrator can never add, remove or change other administrators.
- */
-const ROLES = {
-  owner: "مدیر اصلی",
-  admin: "مدیر",
-  operator: "اپراتور سفارش",
-  custom: "دسترسی سفارشی"
-};
-
-/*
- * Fine-grained permission keys. Every home section maps to its own
- * key, so a manager can be granted e.g. only products without
- * slider/cards/discounts. Legacy roles map onto these; an admin with
- * role='custom' carries an explicit list in admins.permissions.
- */
-const PERMISSIONS = {
-  products: "محصولات",
-  categories: "دسته‌بندی‌ها",
-  slider: "اسلایدر",
-  posts: "نوشته‌ها",
-  faq: "پرسش‌ها",
-  discounts: "تخفیف‌ها",
-  cards: "کارت‌های بانکی",
-  orders: "سفارش‌ها و رسیدها",
-  gateway: "درگاه پرداخت",
-  settings: "تنظیمات فروشگاه",
-  sms: "تنظیمات پیامک",
-  users: "کاربران سایت",
-  admins: "مدیریت مدیران"
-};
-
-const ALL_PERMISSIONS = Object.keys(PERMISSIONS);
-
-// "stats" is readable by every role and is therefore not listed here.
-const ROLE_PERMISSIONS = {
-  owner: ALL_PERMISSIONS,
-  admin: ALL_PERMISSIONS.filter(key => key !== "admins"),
-  operator: ["orders"]
-};
-
-/*
- * Old permission keys (before the fine-grained split) are expanded on
- * read. "catalog" intentionally does NOT grant discounts/cards: those
- * were the leaks reported by the shop owner.
- */
-const LEGACY_EXPANSION = {
-  catalog: ["products", "categories", "slider", "posts", "faq"],
-  orders: ["orders"],
-  gateway: ["gateway"],
-  settings: ["settings"],
-  admins: ["admins"]
-};
-
 /* Which permission governs each editable record kind. */
 const MODEL_PERMISSIONS = {
   p: "products",
@@ -154,45 +109,6 @@ const GATEWAY_LABELS = {
 
 function gatewayLabel(name) {
   return GATEWAY_LABELS[name] || name;
-}
-
-function accessOf(row) {
-  if (row.role === "owner") {
-    return { role: "owner", perms: [...ALL_PERMISSIONS], isOwner: true };
-  }
-
-  if (row.role === "custom") {
-    let list = [];
-
-    try {
-      list = JSON.parse(row.permissions || "[]");
-    } catch {
-      list = [];
-    }
-
-    if (!Array.isArray(list)) list = [];
-
-    const expanded = [];
-
-    for (const key of list) {
-      if (key in LEGACY_EXPANSION) expanded.push(...LEGACY_EXPANSION[key]);
-      else if (ALL_PERMISSIONS.includes(key)) expanded.push(key);
-    }
-
-    return {
-      role: "custom",
-      perms: [...new Set(expanded)],
-      isOwner: false
-    };
-  }
-
-  const role = ROLES[row.role] ? row.role : "admin";
-
-  return { role, perms: [...ROLE_PERMISSIONS[role]], isOwner: false };
-}
-
-function roleAllows(access, permission) {
-  return access.isOwner || access.perms.includes(permission);
 }
 
 function accessLabel(access) {
@@ -408,7 +324,7 @@ const HELP = {
   c:
     "برای هر دسته، نام، عکس و ترتیب نمایش تعیین کنید.\n" +
     "عدد کمتر بالاتر نمایش داده می‌شود.\n" +
-    "عکس را به‌شکل Photo بفرستید.\n" +
+    "عکس را به‌صورت عکس تلگرام یا فایل PNG، JPG یا WebP بفرستید.\n" +
     "غیرفعال‌کردن دسته، خود محصولات آن را پنهان نمی‌کند.",
 
   s:
@@ -832,25 +748,61 @@ async function showSnapppayPanel(env, adminId) {
   ]);
 }
 
+/*
+ * Where the ↩️ back button of a help page leads. The help section key
+ * matches the `help:<section>` context the viewer navigated from.
+ */
+const HELP_BACK = {
+  home: "home",
+  settings: "settings:0",
+  orders: "orders:0",
+  admins: "admins",
+  gateway: "gateway",
+  p: "list:p:0",
+  c: "list:c:0",
+  s: "list:s:0",
+  w: "list:w:0",
+  f: "list:f:0",
+  d: "list:d:0",
+  k: "list:k:0",
+  options: "home",
+  variants: "home"
+};
+
 async function showHelp(env, adminId, section = "home") {
+  const safeSection = String(section || "home");
+
   // Per-field help: "help:field:<key>" -> SETTING_HELP of that setting.
-  if (String(section).startsWith("field:")) {
-    const key = section.slice("field:".length);
+  if (safeSection.startsWith("field:")) {
+    const key = safeSection.slice("field:".length);
 
     return renderPanel(
       env,
       adminId,
       "📖 راهنمای فیلد «" + key + "»\n\n" +
         (SETTING_HELP[key] || "راهنمای جداگانه‌ای برای این فیلد ثبت نشده است."),
-      [[B("🏠 خانه / لغو", "home")]]
+      [
+        [B("↩️ بازگشت", "settings:0")],
+        [B("🏠 خانه / لغو", "home")]
+      ]
     );
   }
+
+  const back = HELP_BACK[safeSection] || "home";
+
+  const keyboard = [];
+
+  if (back !== "home") {
+    keyboard.push([B("↩️ بازگشت", back)]);
+  }
+
+  keyboard.push([B("🏠 خانه / لغو", "home")]);
 
   return renderPanel(
     env,
     adminId,
-    HELP[section] || HELP.home,
-    [[B("🏠 خانه / لغو", "home")]]
+    HELP[safeSection] || HELP.home,
+    keyboard
   );
 }
 
@@ -1129,21 +1081,44 @@ async function showSettings(env, adminId, requestedPage = 0) {
   const page = Math.min(pageNumber(requestedPage), maximumPage);
   const settings = await getSettings(env);
 
-  const keyboard = keys
-    .slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE)
-    .map(key => {
-      const [label, type] = SETTING_FIELDS[key];
+  /*
+   * Two short buttons share one row so the panel stays compact; a
+   * button whose label would be truncated keeps a full row for itself.
+   */
+  const rows = [];
+  let currentRow = [];
 
-      return [
-        B(
-          label +
-            (type === "bool"
-              ? settings[key] ? " ✅" : " ⛔"
-              : ""),
-          "setting:" + key
-        )
-      ];
-    });
+  for (const key of keys.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE)) {
+    const [label, type] = SETTING_FIELDS[key];
+    const text =
+      label + (type === "bool" ? (settings[key] ? " ✅" : " ⛔") : "");
+
+    if (currentRow.length) {
+      const combined = currentRow[0].text.length + text.length;
+
+      if (combined <= 44 && text.length <= 26) {
+        currentRow.push({ text, key });
+        rows.push(currentRow);
+        currentRow = [];
+        continue;
+      }
+
+      rows.push(currentRow);
+      currentRow = [];
+    }
+
+    if (text.length <= 26) {
+      currentRow = [{ text, key }];
+    } else {
+      rows.push([{ text, key }]);
+    }
+  }
+
+  if (currentRow.length) rows.push(currentRow);
+
+  const keyboard = rows.map(row =>
+    row.map(item => B(item.text, "setting:" + item.key))
+  );
 
   const pager = paging(
     "settings",
@@ -2190,6 +2165,14 @@ async function showAdmins(env, adminId, access, requestedPage = 0) {
   if (pager.length) keyboard.push(pager);
   keyboard.push(nav("home", "admins"));
 
+  /*
+   * Only the owner sees the ✏️/🗑 actions. Make that explicit so a
+   * non-owner viewer does not mistake the missing buttons for a bug.
+   */
+  const ownerNote = access.isOwner
+    ? ""
+    : "\n⚠️ دکمه‌های ✏️ تغییر نام و 🗑 حذف فقط برای مدیر اصلی نمایش داده می‌شوند.";
+
   return renderPanel(
     env,
     adminId,
@@ -2197,7 +2180,8 @@ async function showAdmins(env, adminId, access, requestedPage = 0) {
       "برای دیدن یا تغییر دسترسی‌ها روی یک مدیر بزنید.\n" +
       "دسترسی هر مدیر می‌تواند ترکیب چک‌باکسی از بخش‌ها باشد.\n" +
       "✏️ نام نمایشی مدیر (برای گزارش فعالیت) — فقط مدیر اصلی.\n" +
-      "حذف مدیران فقط با مدیر اصلی.",
+      "حذف مدیران فقط با مدیر اصلی." +
+      ownerNote,
     keyboard
   );
 }
@@ -2494,16 +2478,30 @@ async function showLogSections(env, adminId, access, targetId) {
 
   if (!target) throw new Error("Administrator not found.");
 
+  const sectionKeys = Object.keys(AUDIT_SECTIONS);
+
   const counts = await one(
     env,
     "SELECT " +
-    "SUM(section='catalog') AS catalog, " +
-    "SUM(section='orders') AS orders " +
-    "FROM admin_logs WHERE admin_id=?",
+    sectionKeys
+      .map(key => "SUM(section='" + key + "') AS " + key)
+      .join(", ") +
+    " FROM admin_logs WHERE admin_id=?",
     [String(targetId)]
   );
 
+  const settings = await getSettings(env);
+  const retention = Math.max(1, Number(settings.log_retention_days) || 20);
+
   const shownName = String(target.name || "").trim();
+
+  const sectionIcons = {
+    catalog: "🛍",
+    orders: "📦",
+    users: "👥",
+    security: "🔐",
+    system: "⚙️"
+  };
 
   return renderPanel(
     env,
@@ -2511,12 +2509,21 @@ async function showLogSections(env, adminId, access, targetId) {
     "🕵️ فعالیت مدیر " +
       (shownName ? shownName + " (" + target.id + ")" : target.id) + "\n" +
       "سطح فعلی: " + accessLabel(accessOf(target)) + "\n\n" +
-      "رویدادهای ثبت‌شده (۹۰ روز اخیر):\n" +
-      "محصولات و محتوا: " + Number(counts?.catalog || 0).toLocaleString("fa-IR") + "\n" +
-      "سفارش‌ها: " + Number(counts?.orders || 0).toLocaleString("fa-IR"),
+      "رویدادهای ثبت‌شده (" + retention.toLocaleString("fa-IR") + " روز اخیر):\n" +
+      sectionKeys
+        .map(
+          key =>
+            AUDIT_SECTIONS[key] + ": " +
+            Number(counts?.[key] || 0).toLocaleString("fa-IR")
+        )
+        .join("\n"),
     [
-      [B("🛍 محصولات و محتوا", "logview:" + target.id + ":catalog:0")],
-      [B("📦 سفارش‌ها", "logview:" + target.id + ":orders:0")],
+      ...sectionKeys.map(key => [
+        B(
+          (sectionIcons[key] || "•") + " " + AUDIT_SECTIONS[key],
+          "logview:" + target.id + ":" + key + ":0"
+        )
+      ]),
       nav("logs", "admins")
     ]
   );
@@ -2530,7 +2537,8 @@ async function showLogView(env, adminId, access, targetId, section, requestedPag
   await clearSession(env, adminId);
 
   const page = pageNumber(requestedPage);
-  const safeSection = section === "orders" ? "orders" : "catalog";
+  const safeSection = AUDIT_SECTIONS[section] ? section : "catalog";
+  const sectionTitle = AUDIT_SECTIONS[safeSection] || "محصولات و محتوا";
 
   const target = await one(
     env,
@@ -2579,8 +2587,7 @@ async function showLogView(env, adminId, access, targetId, section, requestedPag
   return renderPanel(
     env,
     adminId,
-    (safeSection === "orders" ? "📦 فعالیت سفارش‌های " : "🛍 فعالیت محصولات و محتوای ") +
-      targetLabel + "\n" +
+    "🕵️ فعالیت «" + sectionTitle + "» " + targetLabel + "\n" +
       "صفحه " + (page + 1).toLocaleString("fa-IR") + "\n\n" +
       (lines.length ? lines.join("\n\n") : "رویدادی ثبت نشده است."),
     keyboard
@@ -2979,6 +2986,18 @@ async function handleBotInput(env, adminId, message, state, access) {
     }
 
     await setSetting(env, state.key, value);
+
+    await logAdminAction(
+      env,
+      adminId,
+      "system",
+      "تغییر تنظیمات",
+      SETTING_FIELDS[state.key]?.[0] || state.key,
+      state.key === "sms_api_key" || state.key === "snapppay_client_secret"
+        ? "(محرمانه)"
+        : ""
+    );
+
     await clearSession(env, adminId);
 
     return showSettings(
@@ -3202,6 +3221,15 @@ async function handleBotInput(env, adminId, message, state, access) {
       env,
       "UPDATE admins SET name=? WHERE id=?",
       [name, String(state.targetId)]
+    );
+
+    await logAdminAction(
+      env,
+      adminId,
+      "security",
+      name ? "تغییر نام نمایشی مدیر" : "حذف نام نمایشی مدیر",
+      state.targetId,
+      name
     );
 
     await clearSession(env, adminId);
@@ -3721,7 +3749,7 @@ async function routeBotCallback(
         kind: a,
         recordId: b
       },
-      "عکس را به‌شکل Photo بفرستید؛ حداکثر ۴ مگابایت.",
+      "عکس را به‌صورت عکس تلگرام یا فایل PNG، JPG یا WebP بفرستید؛ حداکثر ۴ مگابایت.\nبرای حفظ شفافیت پس‌زمینه، فایل را به‌صورت Document بفرستید.",
       `edit:${a}:${b}`,
       a
     );
@@ -4187,6 +4215,15 @@ async function routeBotCallback(
       [JSON.stringify([...next]), a]
     );
 
+    await logAdminAction(
+      env,
+      adminId,
+      "security",
+      next.has(b) ? "افزودن دسترسی سفارشی" : "حذف دسترسی سفارشی",
+      a,
+      PERMISSIONS[b] || b
+    );
+
     return showAdminCustom(env, adminId, access, a);
   }
 
@@ -4231,6 +4268,15 @@ async function routeBotCallback(
         [a, b, Date.now()]
       );
     }
+
+    await logAdminAction(
+      env,
+      adminId,
+      "security",
+      target ? "تغییر سطح دسترسی مدیر" : "افزودن مدیر",
+      a,
+      roleLabel(b)
+    );
 
     if (a === String(adminId)) {
       // The acting administrator changed their own level.
@@ -4308,6 +4354,15 @@ async function routeBotCallback(
         "حذف انجام نشد؛ آخرین مدیر و آخرین مدیر اصلی قابل حذف نیستند."
       );
     }
+
+    await logAdminAction(
+      env,
+      adminId,
+      "security",
+      "حذف مدیر",
+      a,
+      ""
+    );
 
     if (a === String(adminId)) {
       await telegram(env, "sendMessage", {
