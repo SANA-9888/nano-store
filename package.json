@@ -1,0 +1,21 @@
+{
+  "name": "persian-store-v2",
+  "version": "2.0.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "description": "Persian mobile-first storefront on Cloudflare with Telegram administration",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "check": "node scripts/check.mjs",
+    "setup": "node --env-file=.env scripts/setup.mjs",
+    "deploy": "npm run check && wrangler deploy",
+    "logs": "wrangler tail",
+    "backup": "wrangler d1 export DB --remote --output=backup.sql"
+  },
+  "devDependencies": {
+    "wrangler": "^4.0.0"
+  }
+}
