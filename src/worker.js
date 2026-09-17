@@ -1,4 +1,7 @@
+<<<<<<< HEAD
 // STORE_V2_TEST_PREPARATION
+=======
+>>>>>>> 09dde4a7b23f42fb789f088d2e1bc94f9d18eecf
 // ============================================================
 // Persian Store V2 — Cloudflare Worker Backend
 // ============================================================
@@ -23,7 +26,10 @@ import {
 import {
   createOrder,
   getPrivateOrder,
+<<<<<<< HEAD
   trackOrder,
+=======
+>>>>>>> 09dde4a7b23f42fb789f088d2e1bc94f9d18eecf
   maintainOrders
 } from "./orders.js";
 
@@ -173,7 +179,11 @@ async function handleBootstrap(request, env) {
     settings.payment_card_enabled
       ? rowsRead(
           env,
+<<<<<<< HEAD
           "SELECT id FROM bank_cards " +
+=======
+          "SELECT id, bank_name, holder_name, card_number, label, position FROM bank_cards " +
+>>>>>>> 09dde4a7b23f42fb789f088d2e1bc94f9d18eecf
           "WHERE enabled = 1 ORDER BY position, created_at"
         )
       : []
@@ -527,12 +537,15 @@ export default {
         response = responseJSON(result);
       }
 
+<<<<<<< HEAD
       // 9. Orders: track an order by code + phone (no login required)
       else if (request.method === "POST" && url.pathname === "/api/orders/track") {
         const result = await trackOrder(request, env);
         response = responseJSON(result);
       }
 
+=======
+>>>>>>> 09dde4a7b23f42fb789f088d2e1bc94f9d18eecf
       // 10. Payments: start an online gateway payment for an order
       else if (request.method === "POST" && url.pathname === "/api/pay/start") {
         response = responseJSON(await startGatewayPayment(request, env, ctx));
@@ -616,7 +629,11 @@ export default {
       const message = isKnown ? error.message : "Internal server error.";
 
       if (!isKnown) {
+<<<<<<< HEAD
         console.error("Unhandled Worker operation failed.");
+=======
+        console.error("Unhandled Worker error:", error);
+>>>>>>> 09dde4a7b23f42fb789f088d2e1bc94f9d18eecf
       }
 
       return setSecurityHeaders(
@@ -632,7 +649,11 @@ export default {
           await maintainOrders(env);
           await deliverNotifications(env, 10);
         } catch (error) {
+<<<<<<< HEAD
           console.error("Scheduled maintenance failed.");
+=======
+          console.error("Scheduled maintenance failed:", error);
+>>>>>>> 09dde4a7b23f42fb789f088d2e1bc94f9d18eecf
         }
       })()
     );

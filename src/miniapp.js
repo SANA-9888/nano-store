@@ -421,6 +421,7 @@ async function apiOrders(env, url) {
   };
 }
 
+<<<<<<< HEAD
 /*
  * CSV export of the current order filter. Same query and same permission
  * gate as the list endpoint, so an exported file can never leak orders the
@@ -489,6 +490,8 @@ async function apiOrdersCsv(env, access, url) {
   };
 }
 
+=======
+>>>>>>> 09dde4a7b23f42fb789f088d2e1bc94f9d18eecf
 async function apiOrderDetail(env, orderId) {
   if (!/^[a-f0-9]{32}$/.test(String(orderId))) {
     throw new AppError(404, "سفارش پیدا نشد.");
@@ -1565,6 +1568,7 @@ export async function handleMiniAppAPI(request, env, ctx) {
       return responseJSON(await apiSmsSettingsGet(env, access));
     }
 
+<<<<<<< HEAD
     // The CSV export must be matched before the bare "orders" list route.
     if (head === "orders" && parts[1] === "csv") {
       const csv = await apiOrdersCsv(env, access, url);
@@ -1579,6 +1583,8 @@ export async function handleMiniAppAPI(request, env, ctx) {
       });
     }
 
+=======
+>>>>>>> 09dde4a7b23f42fb789f088d2e1bc94f9d18eecf
     if (head === "orders") {
       await requirePermission(access, "orders");
       return responseJSON(await apiOrders(env, url));
@@ -1853,7 +1859,11 @@ body{
 .brand h1{margin:0;font-size:1.02rem;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:52vw}
 .chip{display:inline-block;font-size:.68rem;color:var(--mut);border:1px solid var(--line);
   border-radius:999px;padding:1px 9px;margin-top:2px;background:var(--glass)}
+<<<<<<< HEAD
 .iconbtn{width:44px;height:44px;border-radius:13px;border:1px solid var(--line);background:var(--glass);
+=======
+.iconbtn{width:40px;height:40px;border-radius:13px;border:1px solid var(--line);background:var(--glass);
+>>>>>>> 09dde4a7b23f42fb789f088d2e1bc94f9d18eecf
   color:var(--ink);font-size:1.05rem;cursor:pointer;flex:none}
 .iconbtn:active{transform:scale(.94)}
 .tabs{position:fixed;bottom:0;left:0;right:0;display:flex;justify-content:center;gap:4px;
@@ -1878,9 +1888,14 @@ body{
 /* Sales bar chart (home) */
 .chart{display:flex;align-items:flex-end;gap:3px;min-height:172px}
 .chart .bar-col{flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:5px;height:172px;padding-bottom:2px}
+<<<<<<< HEAD
 .chart .bar-label-wrap{width:100%;display:flex;justify-content:center}
 .chart .bar{width:100%;max-width:26px;background:linear-gradient(180deg,var(--accent),var(--brand));border-radius:7px 7px 2px 2px;min-height:2px;opacity:.92}
 .chart .bar-label{font-size:.56rem;color:var(--mut);white-space:nowrap;max-width:64px;overflow:visible;text-overflow:clip;transform:rotate(-38deg);transform-origin:center}
+=======
+.chart .bar{width:100%;max-width:26px;background:linear-gradient(180deg,var(--accent),var(--brand));border-radius:7px 7px 2px 2px;min-height:2px;opacity:.92}
+.chart .bar-label{font-size:.56rem;color:var(--mut);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;transform:rotate(-38deg)}
+>>>>>>> 09dde4a7b23f42fb789f088d2e1bc94f9d18eecf
 .row{display:flex;align-items:center;justify-content:space-between;gap:10px}
 .mut{color:var(--mut);font-size:.74rem}
 .btn{border:1px solid var(--line);background:var(--glass);color:var(--ink);font-family:inherit;
@@ -1893,8 +1908,13 @@ body{
 .btn[disabled]{opacity:.45;pointer-events:none}
 .chips{display:flex;gap:7px;overflow-x:auto;padding-bottom:4px;margin-bottom:12px;scrollbar-width:none}
 .chips::-webkit-scrollbar{display:none}
+<<<<<<< HEAD
 .fchip{flex:none;min-height:44px;border:1px solid var(--line);background:var(--glass);color:var(--mut);
   border-radius:999px;padding:8px 16px;font-size:.78rem;font-family:inherit;cursor:pointer}
+=======
+.fchip{flex:none;border:1px solid var(--line);background:var(--glass);color:var(--mut);
+  border-radius:999px;padding:6px 14px;font-size:.76rem;font-family:inherit;cursor:pointer}
+>>>>>>> 09dde4a7b23f42fb789f088d2e1bc94f9d18eecf
 .fchip.active{background:var(--accent);color:var(--accent-ink);border-color:transparent;font-weight:700}
 .list{display:flex;flex-direction:column;gap:10px}
 .item{display:flex;align-items:center;gap:12px;background:var(--glass);border:1px solid var(--line);
@@ -2435,7 +2455,11 @@ textarea.in{min-height:96px;resize:vertical}
         '<div class="bar-col" title="' + esc(label) + ": " + esc(money(item.amount)) +
         " (" + num(item.orders) + ' سفارش)">' +
         '<div class="bar" style="height:' + height + 'px"></div>' +
+<<<<<<< HEAD
         '<div class="bar-label-wrap"><div class="bar-label">' + esc(label) + "</div></div>" +
+=======
+        '<div class="bar-label">' + esc(label) + "</div>" +
+>>>>>>> 09dde4a7b23f42fb789f088d2e1bc94f9d18eecf
         "</div>";
     });
 

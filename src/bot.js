@@ -1,4 +1,7 @@
+<<<<<<< HEAD
 // STORE_V2_TEST_PREPARATION
+=======
+>>>>>>> 09dde4a7b23f42fb789f088d2e1bc94f9d18eecf
 // ============================================================
 // Persian Store V2 — Telegram administration
 // PART 1 OF 3
@@ -435,6 +438,7 @@ const HELP = {
     "این بخش برای همه مدیران باز است و اطلاعاتی حذف نمی‌کند."
 };
 
+<<<<<<< HEAD
 /*
  * Telegram caps a button label at 64 bytes, and Persian text is
  * multibyte: a length in characters says nothing about the payload
@@ -466,6 +470,13 @@ function cutToBytes(value, budget) {
 
 function cut(value, length = 160) {
   return cutToBytes(value, length);
+=======
+function cut(value, length = 160) {
+  const text = String(value ?? "");
+  return text.length > length
+    ? text.slice(0, length) + "…"
+    : text;
+>>>>>>> 09dde4a7b23f42fb789f088d2e1bc94f9d18eecf
 }
 
 function pageNumber(value) {
@@ -496,6 +507,7 @@ function nav(back = "home", help = "home") {
   ];
 }
 
+<<<<<<< HEAD
 /*
  * Two buttons per row is the visual ceiling. nav() already returns two,
  * so a caller must spread it onto its own row, never into a third slot.
@@ -515,6 +527,8 @@ function chunkRows(buttons, size = 2) {
   return rows;
 }
 
+=======
+>>>>>>> 09dde4a7b23f42fb789f088d2e1bc94f9d18eecf
 function paging(prefix, page, hasNext) {
   const result = [];
 
@@ -747,6 +761,7 @@ async function showGateway(env, adminId) {
         "gatewaytoggle"
       )
     ],
+<<<<<<< HEAD
     /*
      * Three gateways on one row is wider than a phone screen and
      * Telegram clips the labels. Pair them instead.
@@ -759,6 +774,13 @@ async function showGateway(env, adminId) {
         )
       ),
       2
+=======
+    GATEWAYS.map(name =>
+      B(
+        gatewayLabel(name) + (active.has(name) ? " ✅" : " ⬜"),
+        "gatewayuse:" + name
+      )
+>>>>>>> 09dde4a7b23f42fb789f088d2e1bc94f9d18eecf
     ),
     [B("✏️ کد پذیرنده (مرچنت‌آیدی)", "gatewaymerchant")],
     [B("🔐 اطلاعات اسنپ‌پی", "snapppaypanel")],
@@ -881,9 +903,15 @@ async function showSortPicker(env, adminId) {
   ]);
 
   keyboard.push([
+<<<<<<< HEAD
     B("📖 راهنمای این تنظیم", "help:field:default_sort")
   ]);
   keyboard.push(...navRow("settings:0", "settings"));
+=======
+    B("📖 راهنمای این تنظیم", "help:field:default_sort"),
+    ...nav("settings:0", "settings")
+  ]);
+>>>>>>> 09dde4a7b23f42fb789f088d2e1bc94f9d18eecf
 
   return renderPanel(
     env,
@@ -910,9 +938,15 @@ async function showSmsProviderPicker(env, adminId) {
   ]);
 
   keyboard.push([
+<<<<<<< HEAD
     B("📖 راهنمای این تنظیم", "help:field:sms_provider")
   ]);
   keyboard.push(...navRow("settings:0", "settings"));
+=======
+    B("📖 راهنمای این تنظیم", "help:field:sms_provider"),
+    ...nav("settings:0", "settings")
+  ]);
+>>>>>>> 09dde4a7b23f42fb789f088d2e1bc94f9d18eecf
 
   return renderPanel(
     env,
@@ -943,12 +977,20 @@ async function showList(env, adminId, kind, requestedPage = 0) {
       ? record.label || record.bank_name || "کارت بدون عنوان"
       : record[model.name] || "بدون عنوان";
 
+<<<<<<< HEAD
     // "🟢 "/"⚪ " alone cost 5/4 bytes and the ellipsis costs 3, so the
     // name gets 54 bytes — the whole label then fits Telegram's 64.
     const label = (record[model.toggle] ? "🟢 " : "⚪ ") + cut(title, 54);
 
     return [
       B(label, `edit:${kind}:${record.id}`)
+=======
+    return [
+      B(
+        (record[model.toggle] ? "🟢 " : "⚪ ") + cut(title, 35),
+        `edit:${kind}:${record.id}`
+      )
+>>>>>>> 09dde4a7b23f42fb789f088d2e1bc94f9d18eecf
     ];
   });
 
@@ -1147,6 +1189,7 @@ async function showSettings(env, adminId, requestedPage = 0) {
     const text =
       label + (type === "bool" ? (settings[key] ? " ✅" : " ⛔") : "");
 
+<<<<<<< HEAD
     /*
      * Some Persian field guides are longer than Telegram's 64-byte
      * button cap. Cut them to the cap here, not at the character level:
@@ -1160,6 +1203,13 @@ async function showSettings(env, adminId, requestedPage = 0) {
 
       if (combined <= 44 && capped.length <= 26) {
         currentRow.push({ text: capped, key });
+=======
+    if (currentRow.length) {
+      const combined = currentRow[0].text.length + text.length;
+
+      if (combined <= 44 && text.length <= 26) {
+        currentRow.push({ text, key });
+>>>>>>> 09dde4a7b23f42fb789f088d2e1bc94f9d18eecf
         rows.push(currentRow);
         currentRow = [];
         continue;
@@ -1169,10 +1219,17 @@ async function showSettings(env, adminId, requestedPage = 0) {
       currentRow = [];
     }
 
+<<<<<<< HEAD
     if (capped.length <= 26) {
       currentRow = [{ text: capped, key }];
     } else {
       rows.push([{ text: capped, key }]);
+=======
+    if (text.length <= 26) {
+      currentRow = [{ text, key }];
+    } else {
+      rows.push([{ text, key }]);
+>>>>>>> 09dde4a7b23f42fb789f088d2e1bc94f9d18eecf
     }
   }
 
@@ -1592,8 +1649,12 @@ async function showCategoryPicker(
 
   const keyboard = records.slice(0, PAGE_SIZE).map(category => [
     B(
+<<<<<<< HEAD
       // "⚪ " costs 4 bytes, the ellipsis 3.
       (category.enabled ? "" : "⚪ ") + cut(category.name, 57),
+=======
+      (category.enabled ? "" : "⚪ ") + cut(category.name, 35),
+>>>>>>> 09dde4a7b23f42fb789f088d2e1bc94f9d18eecf
       "setcat:" + category.id
     )
   ]);
@@ -1736,9 +1797,14 @@ async function showVariants(env, adminId, productId, requestedPage = 0) {
 
   const keyboard = records.slice(0, PAGE_SIZE).map(variant => [
     B(
+<<<<<<< HEAD
       // "🟢 "/"⚪ " + " · " + the stock number all share the 64-byte cap.
       (variant.enabled ? "🟢 " : "⚪ ") +
         cut(selectionLabel(variant.options), 48) +
+=======
+      (variant.enabled ? "🟢 " : "⚪ ") +
+        cut(selectionLabel(variant.options), 35) +
+>>>>>>> 09dde4a7b23f42fb789f088d2e1bc94f9d18eecf
         " · " + Number(variant.stock).toLocaleString("fa-IR"),
       "variant:" + variant.id
     )
@@ -2145,6 +2211,7 @@ async function showReceipts(env, adminId, orderId) {
 }
 
 async function showOrderSearchResults(env, adminId, input) {
+<<<<<<< HEAD
   // Persian digits are normalised to ASCII, but the stored code/phone may
   // either form. Match the ASCII query against both spellings.
   const ascii = digits(String(input)).trim().toUpperCase();
@@ -2162,6 +2229,19 @@ async function showOrderSearchResults(env, adminId, input) {
     "SELECT id,code,name,status FROM orders " +
     "WHERE code IN (?,?) OR phone IN (?,?) ORDER BY created_at DESC LIMIT 20",
     [ascii, persian, ascii, persian]
+=======
+  const query = digits(String(input)).trim().toUpperCase();
+
+  if (!query || query.length > 40) {
+    throw new Error("Enter a complete order code or mobile number.");
+  }
+
+  const records = await rows(
+    env,
+    "SELECT id,code,name,status FROM orders " +
+    "WHERE code=? OR phone=? ORDER BY created_at DESC LIMIT 20",
+    [query, query]
+>>>>>>> 09dde4a7b23f42fb789f088d2e1bc94f9d18eecf
   );
 
   return renderPanel(
@@ -2197,7 +2277,11 @@ async function showAdmins(env, adminId, access, requestedPage = 0) {
     "SELECT COUNT(*) AS total FROM admins WHERE role='owner'"
   );
 
+<<<<<<< HEAD
   const keyboard = admins.slice(0, PAGE_SIZE).flatMap(admin => {
+=======
+  const keyboard = admins.slice(0, PAGE_SIZE).map(admin => {
+>>>>>>> 09dde4a7b23f42fb789f088d2e1bc94f9d18eecf
     const lastOwner =
       admin.role === "owner" && Number(owners?.total || 0) < 2;
 
@@ -2213,6 +2297,7 @@ async function showAdmins(env, adminId, access, requestedPage = 0) {
     ];
 
     // Renaming and removing administrators is reserved to the owner.
+<<<<<<< HEAD
     // Both icons share the row with the label: three buttons wide would
     // clip the long Persian label, so removal gets its own row below.
     if (access.isOwner) {
@@ -2224,6 +2309,17 @@ async function showAdmins(env, adminId, access, requestedPage = 0) {
     }
 
     return [row];
+=======
+    if (access.isOwner) {
+      row.push(B("✏️", "adminname:" + admin.id));
+
+      if (!lastOwner) {
+        row.push(B("🗑", "deladmin:" + admin.id));
+      }
+    }
+
+    return row;
+>>>>>>> 09dde4a7b23f42fb789f088d2e1bc94f9d18eecf
   });
 
   keyboard.push([B("➕ افزودن مدیر", "addadmin")]);

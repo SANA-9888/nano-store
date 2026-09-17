@@ -22,7 +22,11 @@ export default String.raw`<!doctype html>
  --bg:#fafbf9;
  --surface:#fff;
  --text:#24332a;
+<<<<<<< HEAD
  --muted:#5c6b62;
+=======
+ --muted:#718077;
+>>>>>>> 09dde4a7b23f42fb789f088d2e1bc94f9d18eecf
  --line:#e5ebe5;
  --soft:#f0f4ef;
  --danger:#b73747;
@@ -93,8 +97,11 @@ h3{font-size:1rem}
 .muted{color:var(--muted)}
 .pre{white-space:pre-wrap;overflow-wrap:anywhere}
 .small{font-size:.82rem}
+<<<<<<< HEAD
 .link-button{display:inline-flex;align-items:center;justify-content:center;
   min-height:44px;padding:10px 16px;border-radius:14px}
+=======
+>>>>>>> 09dde4a7b23f42fb789f088d2e1bc94f9d18eecf
 .wide{width:100%}
 .primary{
  background:var(--brand);
@@ -621,7 +628,11 @@ noscript{display:block;margin:20px;padding:20px}
  .wrap{width:calc(100% - 28px)}
  .header-inner{min-height:82px;gap:6px}
  .header-actions{gap:4px}
+<<<<<<< HEAD
  .header-actions .icon{width:44px;height:44px;padding:10px}
+=======
+ .header-actions .icon{width:40px;height:42px;padding:9px}
+>>>>>>> 09dde4a7b23f42fb789f088d2e1bc94f9d18eecf
  #store-logo{width:115px;height:53px}
  #store-name{font-size:1rem}
  .hero{margin-top:22px}
@@ -825,7 +836,11 @@ noscript{display:block;margin:20px;padding:20px}
 
  <footer class="site-footer">
   <p id="footer-text" class="pre"></p>
+<<<<<<< HEAD
   <a id="account-link" href="/account" class="small link-button" hidden>حساب کاربری من</a>
+=======
+  <a id="account-link" href="/account" class="small" hidden>حساب کاربری من</a>
+>>>>>>> 09dde4a7b23f42fb789f088d2e1bc94f9d18eecf
   <button id="last-order-button" class="small" hidden>مشاهده آخرین سفارش این دستگاه</button>
  </footer>
 </main>
@@ -876,7 +891,11 @@ noscript{display:block;margin:20px;padding:20px}
   <div id="detail-error" class="error" role="alert"></div>
 
   <div id="detail-content" hidden>
+<<<<<<< HEAD
    <img id="detail-image" class="detail-image" alt="تصویر محصول" hidden>
+=======
+   <img id="detail-image" class="detail-image" alt="" hidden>
+>>>>>>> 09dde4a7b23f42fb789f088d2e1bc94f9d18eecf
    <div id="detail-thumbnails" class="thumbnails"></div>
    <p id="detail-category" class="muted small"></p>
    <h2 id="detail-name"></h2>
@@ -1085,7 +1104,11 @@ noscript{display:block;margin:20px;padding:20px}
   <button class="icon" data-close aria-label="بستن نوشته">×</button>
  </div>
  <article class="dialog-body">
+<<<<<<< HEAD
   <img id="post-image" alt="تصویر نوشته" hidden>
+=======
+  <img id="post-image" alt="" hidden>
+>>>>>>> 09dde4a7b23f42fb789f088d2e1bc94f9d18eecf
   <h1 id="post-title"></h1>
   <div id="post-content" class="pre"></div>
  </article>
@@ -1285,9 +1308,12 @@ function setTheme(theme, remember = false) {
  * brand color (option chips, add-to-cart button, toast, header …) uses
  * that text color. Without an override the ink is derived from the
  * background luminance so a dark brand always gets white text.
+<<<<<<< HEAD
  *
  * Owners can set both brand_color and category_active_color from the bot,
  * so this only picks the sensible default when they have not chosen one.
+=======
+>>>>>>> 09dde4a7b23f42fb789f088d2e1bc94f9d18eecf
  */
 function brandLuminanceInk(bgColor) {
   const rgb = [1, 3, 5].map(start => {
@@ -1730,7 +1756,11 @@ function renderCategories(categories) {
   $("category-grid").innerHTML = categories.map(item => {
     const image = item.image_id
       ? '<img class="category-image" src="' + mediaURL(item.image_id) +
+<<<<<<< HEAD
         '" alt="تصویر دسته‌بندی ' + escapeHTML(item.name) + '" loading="lazy" decoding="async" width="145" height="145">'
+=======
+        '" alt="" loading="lazy" decoding="async" width="145" height="145">'
+>>>>>>> 09dde4a7b23f42fb789f088d2e1bc94f9d18eecf
       : '<div class="category-image category-placeholder" aria-hidden="true">◇</div>';
 
     return '<button class="category-card" data-category="' + escapeHTML(item.id) +

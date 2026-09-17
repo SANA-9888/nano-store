@@ -586,6 +586,7 @@ export async function recordSalesForOrder(env, orderId) {
   return true;
 }
 
+<<<<<<< HEAD
 /*
  * Public order tracking by code + phone, no login required.
  *
@@ -648,6 +649,8 @@ export async function trackOrder(request, env) {
   };
 }
 
+=======
+>>>>>>> 09dde4a7b23f42fb789f088d2e1bc94f9d18eecf
 export async function markPaidManually(env, orderId, adminId) {
   if (!await isAdmin(env, adminId)) {
     throw new Error("Access denied.");

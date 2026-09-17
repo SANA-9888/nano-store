@@ -2,8 +2,11 @@ import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
 import { spawnSync } from "node:child_process";
+<<<<<<< HEAD
 import { applyMigrations } from "./apply-migrations.mjs";
 // STORE_V2_TEST_PREPARATION
+=======
+>>>>>>> 09dde4a7b23f42fb789f088d2e1bc94f9d18eecf
 
 const root = process.cwd();
 
@@ -418,10 +421,104 @@ async function main() {
     );
   `);
 
+<<<<<<< HEAD
   await applyMigrations({
     query,
     directory: path.join(root, "migrations")
   });
+=======
+  const migrationDirectory = path.join(root, "migrations");
+
+  const migrationFiles = fs.readdirSync(migrationDirectory)
+    .filter(file => /^\d+.*\.sql$/.test(file))
+    .sort();
+
+  if (!migrationFiles.length) {
+    fail("No migration files were found.");
+  }
+
+  for (const file of migrationFiles) {
+    const sql = normalizeSQL(
+      fs.readFileSync(
+        path.join(migrationDirectory, file),
+        "utf8"
+      )
+    );
+
+    const fingerprint = checksum(sql);
+
+    const previous = await query(
+      "SELECT * FROM store_migrations_v2 WHERE name=?",
+      [file]
+    );
+
+    if (previous.length) {
+      if (previous[0].checksum !== fingerprint) {
+        fail(
+          "Migration checksum mismatch: " +
+          file +
+          ". Do not edit an already-started migration. " +
+          "Restore the original file or create a new migration."
+        );
+      }
+
+      if (previous[0].state === "done") {
+        log("Migration already applied: " + file);
+        continue;
+      }
+
+      log("Resuming initial migration: " + file);
+    } else {
+      await query(
+        "INSERT INTO store_migrations_v2(" +
+        "name,checksum,state,started_at" +
+        ") VALUES(?,?,'running',?)",
+        [file, fingerprint, Date.now()]
+      );
+    }
+
+    const statements = sql
+      .split(/^\s*-- statement-breakpoint\s*$/m)
+      .map(statement => statement.trim())
+      .filter(Boolean);
+
+    for (let index = 0; index < statements.length; index++) {
+      log(
+        "Applying " +
+        file +
+        " — statement " +
+        (index + 1) +
+        "/" +
+        statements.length
+      );
+
+      try {
+        await query(statements[index]);
+      } catch (error) {
+        log("");
+        log("Failed SQL statement:");
+        log(statements[index]);
+
+        fail(
+          "Migration failed: " +
+          file +
+          ", statement " +
+          (index + 1) +
+          ". " +
+          error.message
+        );
+      }
+    }
+
+    await query(
+      "UPDATE store_migrations_v2 " +
+      "SET state='done',completed_at=? WHERE name=?",
+      [Date.now(), file]
+    );
+
+    log("Migration completed: " + file);
+  }
+>>>>>>> 09dde4a7b23f42fb789f088d2e1bc94f9d18eecf
 
   log("Checking database safety triggers...");
 
@@ -446,6 +543,7 @@ async function main() {
     "restore_order_coupon",
     "advance_low_stock_cycle",
     "create_low_stock_notification",
+<<<<<<< HEAD
     "create_notification_deliveries",
     "reserve_variant_stock",
     "restore_cancelled_variants",
@@ -454,6 +552,9 @@ async function main() {
     "protect_cancelled_payment",
     "advance_variant_low_stock_cycle",
     "create_variant_low_stock_notification"
+=======
+    "create_notification_deliveries"
+>>>>>>> 09dde4a7b23f42fb789f088d2e1bc94f9d18eecf
   ];
 
   const missingTriggers = requiredTriggers.filter(

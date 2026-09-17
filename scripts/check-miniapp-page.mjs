@@ -1,7 +1,10 @@
 // Sanity: miniapp page renders, script parses, key UI pieces exist.
 import { writeFileSync } from "node:fs";
+<<<<<<< HEAD
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+=======
+>>>>>>> 09dde4a7b23f42fb789f088d2e1bc94f9d18eecf
 import { miniAppPage } from "../src/miniapp.js";
 
 const html = miniAppPage();
@@ -20,7 +23,11 @@ if (!scripts.length) {
 }
 
 scripts.forEach((code, index) => {
+<<<<<<< HEAD
   writeFileSync(join(tmpdir(), `miniapp-script-${index}.js`), code);
+=======
+  writeFileSync(`/tmp/miniapp-script-${index}.js`, code);
+>>>>>>> 09dde4a7b23f42fb789f088d2e1bc94f9d18eecf
 });
 
 const required = [

@@ -1,6 +1,7 @@
 // Extract the real storefront HTML from src/storefront.js and syntax-check its inline script.
 import { writeFileSync, mkdirSync } from "node:fs";
 import { execFileSync } from "node:child_process";
+<<<<<<< HEAD
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import storefront from "../src/storefront.js";
@@ -10,6 +11,15 @@ mkdirSync(outDir, { recursive: true });
 
 const html = storefront;
 writeFileSync(join(outDir, "storefront.html"), html, "utf8");
+=======
+import storefront from "../src/storefront.js";
+
+const outDir = new URL("./_test/", import.meta.url).pathname;
+mkdirSync(outDir, { recursive: true });
+
+const html = storefront;
+writeFileSync(outDir + "storefront.html", html, "utf8");
+>>>>>>> 09dde4a7b23f42fb789f088d2e1bc94f9d18eecf
 console.log("HTML written:", html.length, "chars");
 
 // Basic sanity assertions on the fixes
@@ -31,9 +41,15 @@ for (const [label, ok] of checks) {
 const start = html.indexOf("<script>") + "<script>".length;
 const end = html.lastIndexOf("</script>");
 const js = html.slice(start, end);
+<<<<<<< HEAD
 writeFileSync(join(outDir, "inline-script.js"), js, "utf8");
 try {
   execFileSync(process.execPath, ["--check", join(outDir, "inline-script.js")], { stdio: "pipe" });
+=======
+writeFileSync(outDir + "inline-script.js", js, "utf8");
+try {
+  execFileSync(process.execPath, ["--check", outDir + "inline-script.js"], { stdio: "pipe" });
+>>>>>>> 09dde4a7b23f42fb789f088d2e1bc94f9d18eecf
   console.log("PASS - inline page script parses cleanly (node --check)");
 } catch (error) {
   failed++;
